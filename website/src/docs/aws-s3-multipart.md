@@ -1,9 +1,10 @@
 ---
 type: docs
-order: 53
+order: 3
 title: "AWS S3 Multipart"
 module: "@uppy/aws-s3-multipart"
 permalink: docs/aws-s3-multipart/
+category: 'Destinations'
 ---
 
 The `@uppy/aws-s3-multipart` plugin can be used to upload files directly to an S3 bucket using S3's Multipart upload strategy. With this strategy, files are chopped up in parts of 5MB+ each, so they can be uploaded concurrently. It is also very reliable: if a single part fails to upload, only that 5MB chunk has to be retried.
@@ -12,7 +13,7 @@ The `@uppy/aws-s3-multipart` plugin can be used to upload files directly to an S
 const AwsS3Multipart = require('@uppy/aws-s3-multipart')
 uppy.use(AwsS3Multipart, {
   limit: 4,
-  serverUrl: 'https://uppy-companion.myapp.net/'
+  companionUrl: 'https://uppy-companion.myapp.net/'
 })
 ```
 
@@ -40,7 +41,7 @@ The `@uppy/aws-s3-multipart` plugin has the following configurable options:
 
 The maximum amount of chunks to upload simultaneously. Set to `0` to disable limiting.
 
-### serverUrl: null
+### companionUrl: null
 
 The Companion URL to use for proxying calls to the S3 Multipart API.
 

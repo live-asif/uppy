@@ -1,10 +1,11 @@
 ---
 type: docs
-order: 60
+order: 0
 title: "Status Bar"
 module: "@uppy/status-bar"
 permalink: docs/status-bar/
 alias: docs/statusbar/
+category: 'UI Elements'
 ---
 
 The `@uppy/status-bar` plugin shows upload progress and speed, ETAs, pre- and post-processing information, and allows users to control (pause/resume/cancel) the upload.
@@ -62,7 +63,7 @@ uppy.use(StatusBar, {
   hideUploadButton: false,
   hideRetryButton: false,
   hidePauseResumeButton: false,
-  hideCancelButton: false
+  hideCancelButton: false,
   locale: {}
 })
 ```
@@ -116,11 +117,8 @@ strings: {
   complete: 'Complete',
   // Shown in the status bar if an upload failed.
   uploadFailed: 'Upload failed',
-  // Shown next to `uploadFailed`.
-  pleasePressRetry: 'Please press Retry to upload again',
   // Shown in the status bar while the upload is paused.
   paused: 'Paused',
-  error: 'Error',
   // Used as the label for the button that retries an upload.
   retry: 'Retry',
   // Used as the label for the button that cancels an upload.

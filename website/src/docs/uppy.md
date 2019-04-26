@@ -4,6 +4,7 @@ order: 1
 title: "Uppy"
 module: "@uppy/core"
 permalink: docs/uppy/
+category: 'Docs'
 ---
 
 This is the core module that orchestrates everything in Uppy, managing state and events and providing methods.
@@ -47,7 +48,7 @@ const uppy = Uppy({
   meta: {},
   onBeforeFileAdded: (currentFile, files) => currentFile,
   onBeforeUpload: (files) => {},
-  locale: defaultLocale,
+  locale: {},
   store: new DefaultStore()
 })
 ```
@@ -208,11 +209,24 @@ locale: {
       1: 'You have to select at least %{smart_count} files'
     },
     exceedsSize: 'This file exceeds maximum allowed size of',
-    youCanOnlyUploadFileTypes: 'You can only upload:',
+    youCanOnlyUploadFileTypes: 'You can only upload: %{types}',
     companionError: 'Connection with Companion failed'
   }
 }
 ```
+
+Instead of overriding strings yourself, consider using [one of our language packs](https://github.com/transloadit/uppy/tree/master/packages/%40uppy/locales) (or contributing one!):
+
+```js
+const russianLocale = require('@uppy/locales/lib/ru_RU')
+const uppy = Uppy({
+  locale: russianLocale,
+})
+```
+
+If you use Uppy from a CDN, [there's an example](/examples/i18n/) showcasing how to change languages.
+
+For flexibility, you can pass a `locale` at the `Uppy`/core level, or to Plugins individually. The locale strings that you set in core take precedence.
 
 It also offers the pluralization function, which is used to determine which string will be used for the provided `smart_count` number.
 
@@ -225,6 +239,7 @@ locale: {
 ```
 
 We are using a forked [Polyglot.js](https://github.com/airbnb/polyglot.js/blob/master/index.js#L37-L60).
+
 
 ### `store: defaultStore()`
 
@@ -641,3 +656,13 @@ Fired when “info” message should be hidden in the UI. See [`info-visible`](#
 ### `cancel-all`
 
 Fired when [`uppy.cancelAll()`]() is called, all uploads are canceled, files removed and progress is reset.
+
+### `restriction-failed`
+
+Fired when a file violates certain restrictions when added. This event is just providing another choice for those who want to customize the behavior of file upload restrictions.
+
+```javascript
+uppy.on('restriction-failed', (file, error) => {
+  // do some customized logic like showing system notice to users
+})
+```

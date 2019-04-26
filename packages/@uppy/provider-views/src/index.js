@@ -56,9 +56,8 @@ module.exports = class ProviderView {
     this.getFolder = this.getFolder.bind(this)
     this.getNextFolder = this.getNextFolder.bind(this)
     this.logout = this.logout.bind(this)
-    this.checkAuth = this.checkAuth.bind(this)
+    this.preFirstRender = this.preFirstRender.bind(this)
     this.handleAuth = this.handleAuth.bind(this)
-    this.handleDemoAuth = this.handleDemoAuth.bind(this)
     this.sortByTitle = this.sortByTitle.bind(this)
     this.sortByDate = this.sortByDate.bind(this)
     this.isActiveRow = this.isActiveRow.bind(this)
@@ -93,17 +92,13 @@ module.exports = class ProviderView {
     this.plugin.setPluginState({ folders, files })
   }
 
-  checkAuth () {
-    this.plugin.setPluginState({ checkAuthInProgress: true })
-    this.provider.checkAuth()
-      .then((authenticated) => {
-        this.plugin.setPluginState({ checkAuthInProgress: false })
-        this.plugin.onAuth(authenticated)
-      })
-      .catch((err) => {
-        this.plugin.setPluginState({ checkAuthInProgress: false })
-        this.handleError(err)
-      })
+  /**
+   * Called only the first time the provider view is rendered.
+   * Kind of like an init function.
+   */
+  preFirstRender () {
+    this.plugin.setPluginState({ didFirstRender: true })
+    this.plugin.onFirstRender()
   }
 
   /**
@@ -157,7 +152,7 @@ module.exports = class ProviderView {
         fileId: file.id
       },
       remote: {
-        serverUrl: this.plugin.opts.serverUrl,
+        companionUrl: this.plugin.opts.companionUrl,
         url: `${this.provider.fileUrl(file.requestPath)}`,
         body: {
           fileId: file.id
@@ -222,7 +217,7 @@ module.exports = class ProviderView {
 
   filterItems (items) {
     const state = this.plugin.getPluginState()
-    if (state.filterInput === '') {
+    if (!state.filterInput || state.filterInput === '') {
       return items
     }
     return items.filter((folder) => {
@@ -414,27 +409,20 @@ module.exports = class ProviderView {
     })
   }
 
-  handleDemoAuth () {
-    const state = this.plugin.getPluginState()
-    this.plugin.setPluginState({}, state, {
-      authenticated: true
-    })
-  }
-
   handleAuth () {
     const authState = btoa(JSON.stringify({ origin: location.origin }))
     const link = `${this.provider.authUrl()}?state=${authState}`
 
     const authWindow = window.open(link, '_blank')
     const handleToken = (e) => {
-      if (!this._isOriginAllowed(e.origin, this.plugin.opts.serverPattern) || e.source !== authWindow) {
-        this.plugin.uppy.log(`rejecting event from ${e.origin} vs allowed pattern ${this.plugin.opts.serverPattern}`)
+      if (!this._isOriginAllowed(e.origin, this.plugin.opts.companionAllowedHosts) || e.source !== authWindow) {
+        this.plugin.uppy.log(`rejecting event from ${e.origin} vs allowed pattern ${this.plugin.opts.companionAllowedHosts}`)
         return
       }
       authWindow.close()
       window.removeEventListener('message', handleToken)
       this.provider.setAuthToken(e.data.token)
-      this._loaderWrapper(this.provider.checkAuth(), this.plugin.onAuth, this.handleError)
+      this.preFirstRender()
     }
     window.addEventListener('message', handleToken)
   }
@@ -456,8 +444,11 @@ module.exports = class ProviderView {
 
   handleError (error) {
     const uppy = this.plugin.uppy
-    const message = uppy.i18n('companionError')
     uppy.log(error.toString())
+    if (error.isAuthError) {
+      return
+    }
+    const message = uppy.i18n('companionError')
     uppy.info({message: message, details: error.toString()}, 'error', 5000)
   }
 
@@ -517,12 +508,17 @@ module.exports = class ProviderView {
   }
 
   render (state) {
-    const { authenticated, checkAuthInProgress, loading } = this.plugin.getPluginState()
+    const { authenticated, didFirstRender } = this.plugin.getPluginState()
+    if (!didFirstRender) {
+      this.preFirstRender()
+    }
 
-    if (loading) {
+    // reload pluginState for "loading" attribute because it might
+    // have changed above.
+    if (this.plugin.getPluginState().loading) {
       return (
         <CloseWrapper onUnmount={this.clearSelection}>
-          <LoaderView />
+          <LoaderView i18n={this.plugin.uppy.i18n} />
         </CloseWrapper>
       )
     }
@@ -533,11 +529,9 @@ module.exports = class ProviderView {
           <AuthView
             pluginName={this.plugin.title}
             pluginIcon={this.plugin.icon}
-            demo={this.plugin.opts.demo}
-            checkAuth={this.checkAuth}
             handleAuth={this.handleAuth}
-            handleDemoAuth={this.handleDemoAuth}
-            checkAuthInProgress={checkAuthInProgress} />
+            i18n={this.plugin.uppy.i18n}
+            i18nArray={this.plugin.uppy.i18nArray} />
         </CloseWrapper>
       )
     }
@@ -552,7 +546,6 @@ module.exports = class ProviderView {
       sortByTitle: this.sortByTitle,
       sortByDate: this.sortByDate,
       logout: this.logout,
-      demo: this.plugin.opts.demo,
       isActiveRow: this.isActiveRow,
       isChecked: this.isChecked,
       toggleCheckbox: this.toggleCheckbox,

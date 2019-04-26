@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const prettyBytes = require('prettier-bytes')
 const Core = require('./index')
 const Plugin = require('./Plugin')
 const AcquirerPlugin1 = require('../../../../test/mocks/acquirerPlugin1')
@@ -149,7 +150,7 @@ describe('src/Core', () => {
 
       const newState = {
         bee: 'boo',
-        capabilities: { uploadProgress: true, resumableUploads: false },
+        capabilities: { individualCancellation: true, uploadProgress: true, resumableUploads: false },
         files: {},
         currentUploads: {},
         allowNewUpload: true,
@@ -173,7 +174,7 @@ describe('src/Core', () => {
       // current state
       expect(stateUpdateEventMock.mock.calls[1][0]).toEqual({
         bee: 'boo',
-        capabilities: { uploadProgress: true, resumableUploads: false },
+        capabilities: { individualCancellation: true, uploadProgress: true, resumableUploads: false },
         files: {},
         currentUploads: {},
         allowNewUpload: true,
@@ -186,7 +187,7 @@ describe('src/Core', () => {
       // new state
       expect(stateUpdateEventMock.mock.calls[1][1]).toEqual({
         bee: 'boo',
-        capabilities: { uploadProgress: true, resumableUploads: false },
+        capabilities: { individualCancellation: true, uploadProgress: true, resumableUploads: false },
         files: {},
         currentUploads: {},
         allowNewUpload: true,
@@ -203,17 +204,7 @@ describe('src/Core', () => {
 
       core.setState({ foo: 'bar' })
 
-      expect(core.getState()).toEqual({
-        capabilities: { uploadProgress: true, resumableUploads: false },
-        files: {},
-        currentUploads: {},
-        allowNewUpload: true,
-        foo: 'bar',
-        info: { isHidden: true, message: '', type: 'info' },
-        meta: {},
-        plugins: {},
-        totalProgress: 0
-      })
+      expect(core.getState()).toMatchObject({ foo: 'bar' })
     })
   })
 
@@ -228,11 +219,10 @@ describe('src/Core', () => {
 
     core.reset()
 
-    // expect(corePauseEventMock.mock.calls.length).toEqual(1)
     expect(coreCancelEventMock.mock.calls.length).toEqual(1)
     expect(coreStateUpdateEventMock.mock.calls.length).toEqual(2)
     expect(coreStateUpdateEventMock.mock.calls[1][1]).toEqual({
-      capabilities: { uploadProgress: true, resumableUploads: false },
+      capabilities: { individualCancellation: true, uploadProgress: true, resumableUploads: false },
       files: {},
       currentUploads: {},
       allowNewUpload: true,
@@ -291,7 +281,7 @@ describe('src/Core', () => {
     expect(coreCancelEventMock.mock.calls.length).toEqual(1)
     expect(coreStateUpdateEventMock.mock.calls.length).toEqual(1)
     expect(coreStateUpdateEventMock.mock.calls[0][1]).toEqual({
-      capabilities: { uploadProgress: true, resumableUploads: false },
+      capabilities: { individualCancellation: true, uploadProgress: true, resumableUploads: false },
       files: {},
       currentUploads: {},
       allowNewUpload: true,
@@ -992,7 +982,7 @@ describe('src/Core', () => {
 
       const fileId = Object.keys(core.getState().files)[0]
       const file = core.getFile(fileId)
-      core._calculateProgress(file, {
+      core.emit('upload-progress', file, {
         bytesUploaded: 12345,
         bytesTotal: 17175
       })
@@ -1004,7 +994,7 @@ describe('src/Core', () => {
         uploadStarted: false
       })
 
-      core._calculateProgress(file, {
+      core.emit('upload-progress', file, {
         bytesUploaded: 17175,
         bytesTotal: 17175
       })
@@ -1015,6 +1005,68 @@ describe('src/Core', () => {
         uploadComplete: false,
         uploadStarted: false
       })
+    })
+
+    it('should work with unsized files', async () => {
+      const core = new Core()
+      let proceedUpload
+      let finishUpload
+      const promise = new Promise((resolve) => { proceedUpload = resolve })
+      const finishPromise = new Promise((resolve) => { finishUpload = resolve })
+      core.addUploader(async ([id]) => {
+        core.emit('upload-started', core.getFile(id))
+        await promise
+        core.emit('upload-progress', core.getFile(id), {
+          bytesTotal: 3456,
+          bytesUploaded: 1234
+        })
+        await finishPromise
+        core.emit('upload-success', core.getFile(id), { uploadURL: 'lol' })
+      })
+
+      core.addFile({
+        source: 'instagram',
+        name: 'foo.jpg',
+        type: 'image/jpeg',
+        data: {}
+      })
+
+      core._calculateTotalProgress()
+
+      const uploadPromise = core.upload()
+      await new Promise((resolve) => core.once('upload-started', resolve))
+
+      expect(core.getFiles()[0].size).toBeNull()
+      expect(core.getFiles()[0].progress).toMatchObject({
+        bytesUploaded: 0,
+        // null indicates unsized
+        bytesTotal: null,
+        percentage: 0
+      })
+
+      proceedUpload()
+      // wait for progress event
+      await promise
+
+      expect(core.getFiles()[0].size).toBeNull()
+      expect(core.getFiles()[0].progress).toMatchObject({
+        bytesUploaded: 1234,
+        bytesTotal: 3456,
+        percentage: 35
+      })
+
+      finishUpload()
+      // wait for success event
+      await finishPromise
+
+      expect(core.getFiles()[0].size).toBeNull()
+      expect(core.getFiles()[0].progress).toMatchObject({
+        bytesUploaded: 3456,
+        bytesTotal: 3456,
+        percentage: 100
+      })
+
+      await uploadPromise
     })
 
     it('should calculate the total progress of all file uploads', () => {
@@ -1037,12 +1089,12 @@ describe('src/Core', () => {
       core.setFileState(file1.id, { progress: Object.assign({}, file1.progress, { uploadStarted: new Date() }) })
       core.setFileState(file2.id, { progress: Object.assign({}, file2.progress, { uploadStarted: new Date() }) })
 
-      core._calculateProgress(core.getFile(file1.id), {
+      core.emit('upload-progress', core.getFile(file1.id), {
         bytesUploaded: 12345,
         bytesTotal: 17175
       })
 
-      core._calculateProgress(core.getFile(file2.id), {
+      core.emit('upload-progress', core.getFile(file2.id), {
         bytesUploaded: 10201,
         bytesTotal: 17175
       })
@@ -1073,12 +1125,12 @@ describe('src/Core', () => {
       core.setFileState(file1.id, { progress: Object.assign({}, file1.progress, { uploadStarted: new Date() }) })
       core.setFileState(file2.id, { progress: Object.assign({}, file2.progress, { uploadStarted: new Date() }) })
 
-      core._calculateProgress(core.getFile(file1.id), {
+      core.emit('upload-progress', core.getFile(file1.id), {
         bytesUploaded: 12345,
         bytesTotal: 17175
       })
 
-      core._calculateProgress(core.getFile(file2.id), {
+      core.emit('upload-progress', core.getFile(file2.id), {
         bytesUploaded: 10201,
         bytesTotal: 17175
       })
@@ -1179,6 +1231,13 @@ describe('src/Core', () => {
         expect(err).toMatchObject(new Error('You can only upload: .gif, .jpg, .jpeg'))
         expect(core.getState().info.message).toEqual('You can only upload: .gif, .jpg, .jpeg')
       }
+
+      expect(() => core.addFile({
+        source: 'jest',
+        name: 'foo2.JPG',
+        type: '',
+        data: new File([sampleImage], { type: 'image/jpeg' })
+      }).not.toThrow())
     })
 
     it('should enforce the maxFileSize rule', () => {
@@ -1200,6 +1259,29 @@ describe('src/Core', () => {
         expect(err).toMatchObject(new Error('This file exceeds maximum allowed size of 1.2 KB'))
         expect(core.getState().info.message).toEqual('This file exceeds maximum allowed size of 1.2 KB')
       }
+    })
+
+    it('should emit `restriction-failed` event when some rule is violated', () => {
+      const maxFileSize = 100
+      const core = new Core({
+        restrictions: {
+          maxFileSize
+        }
+      })
+      const restrictionsViolatedEventMock = jest.fn()
+      const file = {
+        name: 'test.jpg',
+        data: new Blob([Buffer.alloc(2 * maxFileSize)])
+      }
+      const errorMessage = `${core.i18n('exceedsSize')} ${prettyBytes(maxFileSize)}`
+      try {
+        core.on('restriction-failed', restrictionsViolatedEventMock)
+        core.addFile(file)
+      } catch (err) {}
+
+      expect(restrictionsViolatedEventMock.mock.calls.length).toEqual(1)
+      expect(restrictionsViolatedEventMock.mock.calls[0][0].name).toEqual(file.name)
+      expect(restrictionsViolatedEventMock.mock.calls[0][1].message).toEqual(errorMessage)
     })
   })
 

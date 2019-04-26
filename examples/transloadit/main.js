@@ -1,11 +1,26 @@
 const { inspect } = require('util')
-const transloadit = require('@uppy/robodog')
+const robodog = require('@uppy/robodog')
+
+const TRANSLOADIT_KEY = '35c1aed03f5011e982b6afe82599b6a0'
+// A trivial template that resizes images, just for example purposes.
+//
+// "steps": {
+//   ":original": { "robot": "/upload/handle" },
+//   "resize": {
+//     "use": ":original",
+//     "robot": "/image/resize",
+//     "width": 100,
+//     "height": 100,
+//     "imagemagick_stack": "v1.0.0"
+//   }
+// }
+const TEMPLATE_ID = 'bbc273f69e0c4694a5a9d1b587abc1bc'
 
 /**
- * transloadit.form
+ * robodog.form
  */
 
-const formUppy = transloadit.form('#test-form', {
+const formUppy = robodog.form('#test-form', {
   debug: true,
   fields: ['message'],
   restrictions: {
@@ -13,8 +28,8 @@ const formUppy = transloadit.form('#test-form', {
   },
   waitForEncoding: true,
   params: {
-    auth: { key: '05a61ed019fe11e783fdbd1f56c73eb0' },
-    template_id: 'be001500a56011e889f9cddd88df842c'
+    auth: { key: TRANSLOADIT_KEY },
+    template_id: TEMPLATE_ID
   },
   modal: true,
   progressBar: '#test-form .progress'
@@ -32,7 +47,7 @@ formUppy.on('upload-error', (file, err) => {
 
 window.formUppy = formUppy
 
-const formUppyWithDashboard = transloadit.form('#dashboard-form', {
+const formUppyWithDashboard = robodog.form('#dashboard-form', {
   debug: true,
   fields: ['message'],
   restrictions: {
@@ -40,27 +55,38 @@ const formUppyWithDashboard = transloadit.form('#dashboard-form', {
   },
   waitForEncoding: true,
   params: {
-    auth: { key: '05a61ed019fe11e783fdbd1f56c73eb0' },
-    template_id: 'be001500a56011e889f9cddd88df842c'
+    auth: { key: TRANSLOADIT_KEY },
+    template_id: TEMPLATE_ID
   },
   dashboard: '#dashboard-form .dashboard'
 })
 
 window.formUppyWithDashboard = formUppyWithDashboard
 
+const dashboard = robodog.dashboard('#dashboard', {
+  debug: true,
+  waitForEncoding: true,
+  params: {
+    auth: { key: TRANSLOADIT_KEY },
+    template_id: TEMPLATE_ID
+  }
+})
+
+window.dashboard = dashboard
+
 /**
- * transloadit.modal
+ * robodog.modal
  */
 
 function openModal () {
-  transloadit.pick({
+  robodog.pick({
     restrictions: {
       allowedFileTypes: ['.png']
     },
     waitForEncoding: true,
     params: {
-      auth: { key: '05a61ed019fe11e783fdbd1f56c73eb0' },
-      template_id: 'be001500a56011e889f9cddd88df842c'
+      auth: { key: TRANSLOADIT_KEY },
+      template_id: TEMPLATE_ID
     },
     providers: [
       'webcam'
@@ -75,17 +101,17 @@ function openModal () {
 window.openModal = openModal
 
 /**
- * transloadit.upload
+ * robodog.upload
  */
 
 window.doUpload = (event) => {
   const resultEl = document.querySelector('#upload-result')
   const errorEl = document.querySelector('#upload-error')
-  transloadit.upload(event.target.files, {
+  robodog.upload(event.target.files, {
     waitForEncoding: true,
     params: {
-      auth: { key: '05a61ed019fe11e783fdbd1f56c73eb0' },
-      template_id: 'be001500a56011e889f9cddd88df842c'
+      auth: { key: TRANSLOADIT_KEY },
+      template_id: TEMPLATE_ID
     }
   }).then((result) => {
     resultEl.classList.remove('hidden')

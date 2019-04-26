@@ -106,28 +106,33 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba($color-black, 0.5);
+  background-color: rgba($black, 0.5);
   z-index: $zIndex-2;
 }
 
 .uppy-Dashboard-inner {
   position: relative;
-  background-color: $color-almost-white;
+  background-color: $gray-50;
   max-width: 100%; /* no !important */
   max-height: 100%; /* no !important */
-  min-width: 290px;
-  min-height: 400px;
+  // min-width: 290px;
+  // min-height: 450px is required for everything to fit on mobile
+  min-height: 450px;
   outline: none;
-  border: 1px solid rgba($color-gray, 0.2);
+  border: 1px solid $gray-200;
   border-radius: 5px;
 
-  .uppy-Dashboard--modal & {
-    z-index: $zIndex-3;
+  .uppy-size--md & {
+    min-height: auto;
   }
 
   @media #{$screen-medium} {
     width: 750px; /* no !important */
     height: 550px; /* no !important */
+  }
+
+  .uppy-Dashboard--modal & {
+    z-index: $zIndex-3;
   }
 }
 
@@ -138,7 +143,12 @@
   overflow: hidden;
   position: relative;
   border-radius: 5px;
+  opacity: 0;
 }
+
+  .uppy-Dashboard--isInnerWrapVisible .uppy-Dashboard-innerWrap{
+    opacity: 1;
+  }
 
 .uppy-Dashboard--modal .uppy-Dashboard-inner {
   position: fixed;
@@ -152,33 +162,28 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    box-shadow: 0 5px 15px 4px rgba($color-black, 0.15);
+    box-shadow: 0 5px 15px 4px rgba($black, 0.15);
   }
 }
 
 .uppy-Dashboard-close {
-  @include reset-button;
-  display: none;
+  display: block;
   position: absolute;
   top: -33px;
   right: -2px;
   cursor: pointer;
-  color: rgba($color-white, 0.9);
+  color: rgba($white, 0.9);
   font-size: 27px;
+  z-index: $zIndex-5;
 
   @media #{$screen-medium} {
     font-size: 35px;
     top: -10px;
     right: -35px;
   }
-
-  .uppy-Dashboard--modal & {
-    z-index: $zIndex-5;
-    display: block;
-  }
 }
 
-.uppy-DashboarAddFiles {
+.uppy-DashboardAddFiles {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -187,6 +192,17 @@
   position: relative;
   text-align: center;
   flex: 1;
+  margin: 7px;
+  border: 1px dashed $gray-250;
+  border-radius: 3px;
+
+  .uppy-Dashboard-AddFilesPanel & {
+    border: none;
+  }
+
+  .uppy-Dashboard--modal & {
+    border-color: $gray-300;
+  }
 }
 
 .uppy-DashboardTabs {
@@ -201,22 +217,22 @@
 }
 
 .uppy-DashboardTabs-title {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 30px;
   font-weight: 400;
   margin: 0;
   padding: 0;
   text-align: center;
-  color: $color-asphalt-gray;
+  color: $gray-700;
 
   .uppy-size--md & {
-    font-size: 17px;
+    font-size: 16px;
     line-height: 40px;
   }
 }
 
-.uppy-DashboarAddFiles-info {
-  padding-top: 30px;
+.uppy-DashboardAddFiles-info {
+  padding-top: 15px;
   padding-bottom: 15px;
 
   .uppy-size--md & {
@@ -224,6 +240,7 @@
     bottom: 30px;
     left: 0;
     right: 0;
+    padding-top: 30px;
     padding-bottom: 0;
   }
 }
@@ -231,12 +248,16 @@
 .uppy-Dashboard-browse {
   @include reset-button;
   cursor: pointer;
-  color: rgba($color-cornflower-blue, 0.9);
+  color: rgba($blue, 0.9);
+
+  &:hover {
+    text-decoration: underline;
+  }
 }
 
   .uppy-Dashboard-browse:focus {
     outline: none;
-    border-bottom: 2px solid $color-cornflower-blue;
+    border-bottom: 2px solid $blue;
   }
 
 .uppy-DashboardTabs-list {
@@ -254,7 +275,7 @@
     justify-content: center;
     max-width: 600px;
     overflow-x: initial;
-    margin-top: 30px;
+    margin-top: 15px;
     padding-top: 0;
   }
 }
@@ -263,13 +284,13 @@
   width: 100%;
   display: inline-block;
   text-align: center;
-  border-bottom: 1px solid rgba($color-gray, 0.2);
+  border-bottom: 1px solid $gray-200;
   padding: 0px 2px;
 
   .uppy-size--md & {
     width: initial;
     margin-bottom: 20px;
-    border-bottom: initial;
+    border-bottom: none;
     padding: 0;
   }
 }
@@ -282,30 +303,35 @@
   background-color: transparent;
   -webkit-appearance: none;
   appearance: none;
-  color: darken($color-gray, 25%);
+  color: $gray-700;
   display: flex;
   flex-direction: row;
   align-items: center;
   padding: 12px 20px;
   line-height: 1;
+  text-align: center;
 
   .uppy-size--md & {
-    width: 80px;
-    margin: 0 5px;
+    width: 86px;
+    margin-right: 1px;
     flex-direction: column;
-    padding: 0;
+    padding: 10px 3px;
+    border-radius: 5px;
   }
 }
 
-  .uppy-DashboardTab-btn:hover {
-    color: $color-cornflower-blue;
+  .uppy-DashboardTab-btn::-moz-focus-inner {
+    border: 0;
   }
 
+  .uppy-DashboardTab-btn:hover {
+    background-color: $gray-100--highlighted;
+  }
+
+  .uppy-DashboardTab-btn:active,
   .uppy-DashboardTab-btn:focus {
-    outline-offset: 0;
-    .uppy-size--md & {
-      outline-offset: $size-focus-offset;
-    }
+    background-color: darken($gray-100--highlighted, 2%);
+    outline: none;
   }
 
   .uppy-DashboardTab-btn svg {
@@ -316,19 +342,13 @@
     }
   }
 
-  .uppy-DashboardTab-btn svg,
-  .uppy-DashboardTab-btn svg * {
+  .uppy-DashboardTab-btn svg {
     max-width: 100%;
     max-height: 100%;
     display: inline-block;
     vertical-align: text-top;
     overflow: hidden;
-    transition: transform 0.2s;
-    will-change: transform;
-  }
-
-  .uppy-DashboardTab-btn:hover svg {
-    transform: scale(1.1, 1.1);
+    transition: transform ease-in-out .15s;
   }
 
 .uppy-DashboardTab-name {
@@ -370,10 +390,9 @@
   justify-content: space-between;
   height: 40px;
   width: 100%;
-  border-bottom: 1px solid rgba($color-gray, 0.3);
-  
+  border-bottom: 1px solid $gray-200;
   z-index: $zIndex-4;
-  background-color: $color-almost-white;
+  background-color: $gray-50;
   padding: 0 10px;
 
   .uppy-size--md & {
@@ -390,7 +409,7 @@
   text-align: center;
   font-size: 12px;
   line-height: 40px;
-  font-weight: normal;
+  font-weight: 500;
   max-width: 170px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -406,29 +425,38 @@
 
 .uppy-DashboardContent-back {
   @include reset-button;
-  font-size: 13px;
-  font-weight: 500;
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 400;
   cursor: pointer;
-  color: $color-cornflower-blue;
+  color: $blue;
+  padding: 7px 6px;
+  margin-left: -6px;
+  border-radius: 3px;
+
+  &:hover {
+    color: darken($blue, 12%);
+  }
 
   .uppy-size--md & {
-    font-size: 15px;
+    font-size: 14px;
   }
 }
 
 .uppy-DashboardContent-addMore {
   @include reset-button;
+  display: inline-block;
   font-weight: 500;
   cursor: pointer;
-  color: $color-cornflower-blue;
-  stroke: $color-cornflower-blue;
-  stroke-width: 0.7px;
-  width: 13px;
-  height: 13px;
+  color: $blue;
+  width: 27px;
+  height: 27px;
+  padding: 6px;
+  margin-right: -6px;
+  border-radius: 3px;
 
-  .uppy-size--md & {
-    width: 15px;
-    height: 15px;
+  &:hover {
+    color: darken($blue, 12%)
   }
 }
 
@@ -442,7 +470,7 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background-color: darken($color-white, 4%);
+  background-color: darken($white, 4%);
   overflow: hidden;
   z-index: $zIndex-5;
   border-radius: 5px;
@@ -457,9 +485,9 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: $color-almost-white;
-  background: linear-gradient(0deg, $color-almost-white 35%, rgba($color-almost-white, 0.85) 100%);
-  box-shadow: 0 0 10px 5px rgba($color-black, 0.15);
+  background: $gray-50;
+  background: linear-gradient(0deg, $gray-50 35%, rgba($gray-50, 0.85) 100%);
+  box-shadow: 0 0 10px 5px rgba($black, 0.15);
   overflow: hidden;
   z-index: $zIndex-5;
   border-radius: 5px;
@@ -490,37 +518,37 @@
   height: 100%;
 }
 
-.uppy-Dashboard-next {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: none;
-  background-color: rgba($color-gray, 0.7);
-  -webkit-appearance: none;
-  appearance: none;
-  border: 0;
-  z-index: $zIndex-3;
-  transition: background-color 0.5s;
-  color: $color-white;
-  font-family: inherit;
-  font-size: 14px;
-  line-height: 1;
-  padding: 0;
-  margin: 0;
-  outline: none;
-  cursor: not-allowed;
-}
+// .uppy-Dashboard-next {
+//   position: absolute;
+//   top: 0;
+//   left: 0;
+//   width: 100%;
+//   height: 100%;
+//   background: none;
+//   background-color: rgba($gray-500, 0.7);
+//   -webkit-appearance: none;
+//   appearance: none;
+//   border: 0;
+//   z-index: $zIndex-3;
+//   transition: background-color 0.5s;
+//   color: $white;
+//   font-family: inherit;
+//   font-size: 14px;
+//   line-height: 1;
+//   padding: 0;
+//   margin: 0;
+//   outline: none;
+//   cursor: not-allowed;
+// }
 
-.uppy-Dashboard-next.is-active {
-  cursor: pointer;
-  background-color: $color-cornflower-blue;
+// .uppy-Dashboard-next.is-active {
+//   cursor: pointer;
+//   background-color: $blue;
 
-  &:hover {
-    background-color: darken($color-cornflower-blue, 20%);
-  }
-}
+//   &:hover {
+//     background-color: darken($blue, 20%);
+//   }
+// }
 
 .uppy-Dashboard-filesContainer {
   @include clearfix;
@@ -542,16 +570,40 @@
     padding-top: 10px;
   }
 
-.uppy-Dashboard.drag .uppy-Dashboard-innerWrap {
-  background-color: darken($color-almost-white, 25%)
+.uppy-Dashboard-dropFilesHereHint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  visibility: hidden;
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  bottom: 7px;
+  left: 7px;
+  padding-top: 90px;
+  border: 1px dashed $blue;
+  border-radius: 3px;
+  z-index: 2000;
+  text-align: center;
+  background-image: url("data:image/svg+xml,%3Csvg width='48' height='48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M24 1v1C11.85 2 2 11.85 2 24s9.85 22 22 22 22-9.85 22-22S36.15 2 24 2V1zm0 0V0c13.254 0 24 10.746 24 24S37.254 48 24 48 0 37.254 0 24 10.746 0 24 0v1zm7.707 19.293a.999.999 0 1 1-1.414 1.414L25 16.414V34a1 1 0 1 1-2 0V16.414l-5.293 5.293a.999.999 0 1 1-1.414-1.414l7-7a.999.999 0 0 1 1.414 0l7 7z' fill='%232275D7' fill-rule='nonzero'/%3E%3C/svg%3E");
+  background-position: 50% 50%;
+  background-repeat: no-repeat;
+  color: #707070;
+  font-size: 16px;
 }
 
-.uppy-Dashboard.drag .uppy-Dashboard-AddFilesPanel {
-  background: darken($color-almost-white, 20%)
-}
-
-.uppy-Dashboard.drag .uppy-Dashboard-files--noFiles {
-  border-color: darken($color-almost-white, 20%);
+.uppy-Dashboard.uppy-Dashboard--isDraggingOver{
+  .uppy-Dashboard-dropFilesHereHint{
+    visibility: visible;
+  }
+  .uppy-DashboardContent-bar,
+  .uppy-Dashboard-files,
+  .uppy-Dashboard-progressindicators {
+    opacity: 0.15;
+  }
+  .uppy-DashboardAddFiles {
+    opacity: 0.03;
+  }
 }
 
 .uppy-Dashboard-dropFilesTitle {
@@ -560,53 +612,52 @@
   font-size: 16px;
   line-height: 1.45;
   font-weight: 400;
-  color: $color-asphalt-gray;
+  color: $gray-700;
   margin: auto;
   padding: 0 15px;
   padding-top: 20px;
 
   .uppy-size--md & {
-    max-width: 400px;
+    // wider, to accomodate for different translations
+    max-width: 470px;
     font-size: 27px;
   }
 }
 
 .uppy-Dashboard-note {
-  font-size: 13px;
-  line-height: 1.2;
+  font-size: 14px;
+  line-height: 1.25;
   text-align: center;
-  color: rgba($color-asphalt-gray, 0.8);
-  // position: absolute;
-  // bottom: 45px;
-  // left: 0;
-  width: 100%;
+  color: $gray-600;
+  max-width: 350px;
+  margin: auto;
+  padding: 0 15px;
 
   .uppy-size--md & {
     font-size: 16px;
+    line-height: 1.35;
+    max-width: 600px;
   }
 }
 
-.uppy-Dashboard-poweredBy {
+a.uppy-Dashboard-poweredBy {
   display: inline-block;
   text-align: center;
   font-size: 11px;
-  color: $color-gray;
+  color: $gray-500;
   text-decoration: none;
   margin-top: 8px;
 }
 
-.uppy-Dashboard-poweredByUppy {
-  color: $color-gray;
-}
-
 .uppy-Dashboard-poweredByIcon {
-  stroke: $color-gray;
+  stroke: $gray-500;
   fill: none;
   margin-left: 1px;
   margin-right: 1px;
   position: relative;
   top: 1px;
   opacity: 0.9;
+  vertical-align: text-top;
 }
 
 .uppy-DashboardItem {
@@ -615,21 +666,33 @@
   position: relative;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid lighten($color-gray, 35%);
+  border-bottom: 1px solid $gray-200;
   padding-bottom: 10px;
   padding-left: 10px;
 
+  $rl-margin: 15px;
   .uppy-size--md & {
-    flex-direction: column;
     float: left;
-    width: 140px;
+    margin: 5px $rl-margin;
+    width: calc(33.333% - #{$rl-margin} - #{$rl-margin});
     height: 170px;
-    margin: 5px 15px;
-    border: 0;
+
+    flex-direction: column;
     background-color: initial;
+    border: 0;
     border-bottom: none;
     padding-bottom: 0;
     padding-left: 0;
+  }
+
+  .uppy-size--lg & {
+    width: calc(25% - #{$rl-margin} - #{$rl-margin});
+    height: 190px;
+  }
+
+  .uppy-size--xl & {
+    width: calc(20% - #{$rl-margin} - #{$rl-margin});
+    height: 210px;
   }
 }
 
@@ -647,6 +710,14 @@
     height: 100px;
     border: 0;
   }
+
+  .uppy-size--lg & {
+    height: 120px;
+  }
+
+  .uppy-size--xl & {
+    height: 140px;
+  }
 }
 
 .uppy-DashboardItem-previewLink {
@@ -660,10 +731,8 @@
 
 .uppy-DashboardItem-sourceIcon {
   display: inline-block;
-  vertical-align: middle;
-  width: 11px;
-  height: 11px;
-  color: rgba($color-gray, 0.85);
+  vertical-align: bottom;
+  color: $gray-500;
 }
 
 .uppy-DashboardItem-sourceIcon svg,
@@ -671,9 +740,11 @@
   max-width: 100%;
   max-height: 100%;
   display: inline-block;
-  vertical-align: text-top;
+  vertical-align: text-bottom;
   overflow: hidden;
   fill: currentColor;
+  width: 11px;
+  height: 12px;
 }
 
 .uppy-DashboardItem-previewInnerWrap {
@@ -685,11 +756,11 @@
   justify-content: center;
   align-items: center;
   flex-direction: column;
-  box-shadow: 0 0 2px 0 rgba($color-gray, 0.7);
+  box-shadow: 0 0 2px 0 rgba($black, 0.4);
   border-radius: 3px;
 
   .uppy-size--md & {
-    box-shadow: 0 1px 3px rgba($color-black,.2);
+    box-shadow: 0 1px 3px rgba($black, 0.2);
   }
 }
 
@@ -700,7 +771,7 @@
     bottom: 0;
     left: 0;
     right: 0;
-    background-color: rgba($color-black, 0.65) /* no !important */;
+    background-color: rgba($black, 0.65) /* no !important */;
     display: none;
     z-index: $zIndex-2;
   }
@@ -714,20 +785,20 @@
 
 
 .uppy-DashboardItem-previewIconWrap {
-  height: 80px;
-  max-height: 90%;
+  height: 76px;
+  max-height: 75%;
   position: relative;
 }
 
 .uppy-DashboardItem-previewIconBg {
   width: 100%;
   height: 100%;
-  filter: drop-shadow(rgba($color-black, 0.1) 0px 0px 1px);
+  filter: drop-shadow(rgba($black, 0.1) 0px 1px 1px);
 }
 
 .uppy-DashboardItem-previewIcon {
-  width: 18px;
-  height: 18px;
+  width: 25px;
+  height: 25px;
   z-index: $zIndex-1;
   position: absolute;
   top: 50%;
@@ -735,8 +806,13 @@
   transform: translate(-50%, -50%);
 
   .uppy-size--md & {
-    width: 25px;
-    height: 25px;
+    width: 38px;
+    height: 38px;
+  }
+
+  svg {
+    width: 100%;
+    height: 100%;
   }
 }
 
@@ -748,7 +824,7 @@
   text-transform: uppercase;
   font-size: 9px;
   letter-spacing: 1px;
-  color: $color-asphalt-gray;
+  color: $gray-700;
   z-index: $zIndex-1;
   user-select: none;
 }
@@ -762,18 +838,17 @@
     width: 100%;
     max-width: 100%;
     flex: 1;
-    padding: 8px 3px 0 3px;
+    padding: 8px 0 0;
     border-top: 0;
   }
 }
 
 .uppy-DashboardItem-name {
-  font-size: 11px;
-  line-height: 1.35;
+  font-size: 12px;
+  line-height: 1.3;
   font-weight: 500;
   margin: 0;
   padding: 0;
-  max-height: 28px;
   margin-bottom: 5px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -787,15 +862,15 @@
 }
 
 .uppy-DashboardItem-name a {
-  text-decoration: underline;
-  color: $color-black;
+  text-decoration: none;
+  color: $gray-800;
 }
 
 .uppy-DashboardItem-status {
   font-size: 11px;
-  line-height: 11px;
+  line-height: 1.3;
   font-weight: normal;
-  color: darken($color-gray, 15%);
+  color: $gray-600;
   margin-bottom: 4px;
 }
 
@@ -807,15 +882,17 @@
 
 .uppy-DashboardItem-edit,
 .uppy-DashboardItem-copyLink {
-  @include reset-button;
   display: inline-block;
   vertical-align: bottom;
   cursor: pointer;
-}
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
 
-.uppy-DashboardItem-copyLink {
-  width: 12px;
-  height: 11px;
+  &:hover {
+    text-decoration: underline;
+  }
 }
 
 .uppy-DashboardItem-edit:not(:first-child),
@@ -830,8 +907,7 @@
     position: absolute;
     top: 0;
     left: -9px;
-    color: $color-gray;
-    font-weight: 700;
+    color: $gray-600;
   }
 }
 
@@ -850,14 +926,14 @@
 .uppy-DashboardItem-remove {
   @include reset-button;
   cursor: pointer;
-  color: $color-black;
-  width: 16px;
-  height: 16px;
-  opacity: 0.75;
+  color: $gray-900;
+  width: 20px;
+  height: 20px;
+  padding: 1px;
+  opacity: 0.9;
 
-  .uppy-size--md & {
-    width: 20px;
-    height: 20px;
+  &:hover {
+    opacity: 1;
   }
 }
 
@@ -872,7 +948,7 @@
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: $zIndex-3;
-  color: $color-white;
+  color: $white;
   text-align: center;
   width: 120px;
   display: none;
@@ -899,7 +975,6 @@
   width: 38px;
   height: 38px;
   opacity: 0.9;
-  transition: all .35s ease;
 
   .uppy-size--md & {
     width: 55px;
@@ -927,8 +1002,8 @@
     opacity: 1;
 
     .uppy-size--md & {
-      width: 25px;
-      height: 25px;
+      width: 22px;
+      height: 22px;
     }
   }
 
@@ -942,7 +1017,7 @@
   bottom: -10px;
   left: 0;
   width: 100%;
-  text-shadow: 0 1px 0 rgba($color-black, 0.3);
+  text-shadow: 0 1px 0 rgba($black, 0.3);
 
   .uppy-size--md & {
     display: block;
@@ -955,40 +1030,40 @@
 }
 
 .uppy-DashboardItem .bg {
-  stroke: rgba($color-white, 0.4);
+  stroke: rgba($white, 0.4);
   opacity: 0;
 }
 
 .uppy-DashboardItem .progress {
-  stroke: $color-white;
+  stroke: $white;
   transition: stroke-dashoffset .5s ease-out;
   opacity: 0;
 }
 
 .uppy-DashboardItem .play {
-  stroke: $color-white;
-  fill: $color-white;
+  stroke: $white;
+  fill: $white;
   opacity: 0;
   transition: all 0.2s;
   display: none;
 }
 
 .uppy-DashboardItem .cancel {
-  fill: $color-white;
+  fill: $white;
   opacity: 0;
   transition: all 0.2s;
 }
 
 .uppy-DashboardItem .pause {
-  stroke: $color-white;
-  fill: $color-white;
+  stroke: $white;
+  fill: $white;
   opacity: 0;
   transition: all 0.2s;
   display: none;
 }
 
 .uppy-DashboardItem.is-error .retry {
-  fill: $color-white;
+  fill: $white;
 }
 
 .uppy-DashboardItem.is-resumable {
@@ -998,7 +1073,7 @@
 
 .UppyIcon-progressCircle .check {
   opacity: 0;
-  fill: $color-white;
+  fill: $white;
   transition: all 0.2s;
 }
 
@@ -1027,6 +1102,16 @@
   }
 }
 
+.uppy-DashboardItem.is-noIndividualCancellation {
+  .uppy-DashboardItem-progressIndicator {
+    cursor: default;
+  }
+
+  .cancel {
+    display: none;
+  }
+}
+
 .uppy-DashboardItem.is-processing .uppy-DashboardItem-progress {
   opacity: 0;
 }
@@ -1037,8 +1122,8 @@
   }
 
   .progress {
-    stroke: $color-green;
-    fill: $color-green;
+    stroke: $green;
+    fill: $green;
     opacity: 1;
   }
 
@@ -1054,7 +1139,7 @@
 
 .uppy-DashboardItem-progressInner {
   height: 15px;
-  background-color: $color-cornflower-blue;
+  background-color: $blue;
   position: absolute;
   top: 0;
   left: 0;
@@ -1062,11 +1147,11 @@
 
 .uppy-Dashboard-actions {
   height: 55px;
-  border-top: 1px solid rgba($color-gray, 0.3);
+  border-top: 1px solid $gray-200;
   display: flex;
   align-items: center;
   padding: 0 15px;
-  background-color: $color-almost-white;
+  background-color: $gray-50;
 }
 
   .uppy-size--md .uppy-Dashboard-actions {
@@ -1103,8 +1188,8 @@
   position: absolute;
   top: -12px;
   right: -12px;
-  background-color: $color-green;
-  color: $color-white;
+  background-color: $green;
+  color: $white;
   border-radius: 50%;
   width: 16px;
   height: 16px;
@@ -1134,8 +1219,8 @@
   right: 0;
   bottom: 0;
   z-index: $zIndex-5;
-  box-shadow: 0px 0px 10px 4px rgba($color-black, 0.1);
-  background-color: $color-white;
+  box-shadow: 0px 0px 10px 4px rgba($black, 0.1);
+  background-color: $white;
   display: flex;
   flex-direction: column;
 }
@@ -1156,13 +1241,13 @@
   align-items: center;
   justify-content: center;
   flex-grow: 1;
-  border-bottom: 1px solid rgba($color-gray, 0.3);
-  background-color: lighten($color-gray, 40%); /* no !important */
+  border-bottom: 1px solid $gray-200;
+  background-color: $gray-50; /* no !important */
   position: relative;
 }
 
 .uppy-DashboardFileCard-preview img {
-  box-shadow: 0px 3px 20px rgba($color-black, 0.15);
+  box-shadow: 0px 3px 20px rgba($black, 0.15);
   max-width: 90%;
   max-height: 90%;
   object-fit: cover;
@@ -1192,10 +1277,10 @@
   vertical-align: middle;
   width: 22%;
   font-size: 12px;
-  color: $color-asphalt-gray;
+  color: $gray-700;
 
   .uppy-size--md & {
-    font-size: 13px;
+    font-size: 14px;
   }
 }
 
@@ -1204,6 +1289,3 @@
   vertical-align: middle;
   width: 78%;
 }
-
-
-

@@ -1,5 +1,7 @@
 'use strict'
 
+const AuthError = require('./AuthError')
+
 // Remove the trailing slash so we can always safely append /xyz.
 function stripSlash (url) {
   return url.replace(/\/$/, '')
@@ -14,7 +16,7 @@ module.exports = class RequestClient {
 
   get hostname () {
     const { companion } = this.uppy.getState()
-    const host = this.opts.serverUrl
+    const host = this.opts.companionUrl
     return stripSlash(companion && companion[host] ? companion[host] : host)
   }
 
@@ -25,14 +27,24 @@ module.exports = class RequestClient {
     }
   }
 
-  get headers () {
-    return Object.assign({}, this.defaultHeaders, this.opts.serverHeaders || {})
+  headers () {
+    return Promise.resolve(Object.assign({}, this.defaultHeaders, this.opts.serverHeaders || {}))
+  }
+
+  _getPostResponseFunc (skip) {
+    return (response) => {
+      if (!skip) {
+        return this.onReceiveResponse(response)
+      }
+
+      return response
+    }
   }
 
   onReceiveResponse (response) {
     const state = this.uppy.getState()
     const companion = state.companion || {}
-    const host = this.opts.serverUrl
+    const host = this.opts.companionUrl
     const headers = response.headers
     // Store the self-identified domain name for the Companion instance we just hit.
     if (headers.has('i-am') && headers.get('i-am') !== companion[host]) {
@@ -52,51 +64,70 @@ module.exports = class RequestClient {
     return `${this.hostname}/${url}`
   }
 
-  get (path) {
-    return fetch(this._getUrl(path), {
-      method: 'get',
-      headers: this.headers,
-      credentials: 'same-origin'
-    })
-      // @todo validate response status before calling json
-      .then(this.onReceiveResponse)
-      .then((res) => res.json())
-      .catch((err) => {
-        throw new Error(`Could not get ${this._getUrl(path)}. ${err}`)
-      })
+  _json (res) {
+    if (res.status === 401) {
+      throw new AuthError()
+    }
+
+    if (res.status < 200 || res.status > 300) {
+      throw new Error(`Failed request to ${res.url}. ${res.statusText}`)
+    }
+    return res.json()
   }
 
-  post (path, data) {
-    return fetch(this._getUrl(path), {
-      method: 'post',
-      headers: this.headers,
-      credentials: 'same-origin',
-      body: JSON.stringify(data)
+  get (path, skipPostResponse) {
+    return new Promise((resolve, reject) => {
+      this.headers().then((headers) => {
+        fetch(this._getUrl(path), {
+          method: 'get',
+          headers: headers,
+          credentials: 'same-origin'
+        })
+          .then(this._getPostResponseFunc(skipPostResponse))
+          .then((res) => this._json(res).then(resolve))
+          .catch((err) => {
+            err = err.isAuthError ? err : new Error(`Could not get ${this._getUrl(path)}. ${err}`)
+            reject(err)
+          })
+      })
     })
-      .then(this.onReceiveResponse)
-      .then((res) => {
-        if (res.status < 200 || res.status > 300) {
-          throw new Error(`Could not post ${this._getUrl(path)}. ${res.statusText}`)
-        }
-        return res.json()
-      })
-      .catch((err) => {
-        throw new Error(`Could not post ${this._getUrl(path)}. ${err}`)
-      })
   }
 
-  delete (path, data) {
-    return fetch(`${this.hostname}/${path}`, {
-      method: 'delete',
-      headers: this.headers,
-      credentials: 'same-origin',
-      body: data ? JSON.stringify(data) : null
-    })
-      .then(this.onReceiveResponse)
-      // @todo validate response status before calling json
-      .then((res) => res.json())
-      .catch((err) => {
-        throw new Error(`Could not delete ${this._getUrl(path)}. ${err}`)
+  post (path, data, skipPostResponse) {
+    return new Promise((resolve, reject) => {
+      this.headers().then((headers) => {
+        fetch(this._getUrl(path), {
+          method: 'post',
+          headers: headers,
+          credentials: 'same-origin',
+          body: JSON.stringify(data)
+        })
+          .then(this._getPostResponseFunc(skipPostResponse))
+          .then((res) => this._json(res).then(resolve))
+          .catch((err) => {
+            err = err.isAuthError ? err : new Error(`Could not post ${this._getUrl(path)}. ${err}`)
+            reject(err)
+          })
       })
+    })
+  }
+
+  delete (path, data, skipPostResponse) {
+    return new Promise((resolve, reject) => {
+      this.headers().then((headers) => {
+        fetch(`${this.hostname}/${path}`, {
+          method: 'delete',
+          headers: headers,
+          credentials: 'same-origin',
+          body: data ? JSON.stringify(data) : null
+        })
+          .then(this._getPostResponseFunc(skipPostResponse))
+          .then((res) => this._json(res).then(resolve))
+          .catch((err) => {
+            err = err.isAuthError ? err : new Error(`Could not delete ${this._getUrl(path)}. ${err}`)
+            reject(err)
+          })
+      })
+    })
   }
 }

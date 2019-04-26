@@ -1,9 +1,11 @@
 ---
 type: docs
-order: 44
+order: 14
 title: "Import From URL"
+menu_prefix: "<span title='Requires Companion'>ⓒ </span>"
 module: "@uppy/url"
 permalink: docs/url/
+category: 'Sources'
 ---
 
 The `@uppy/url` plugin allows users to import files from the internet. Paste any URL and it will be added!
@@ -54,7 +56,7 @@ The `@uppy/url` plugin has the following configurable options:
 ```js
 uppy.use(Url, {
   target: Dashboard,
-  serverUrl: 'https://companion.uppy.io/',
+  companionUrl: 'https://companion.uppy.io/',
   locale: {}
 })
 ```
@@ -71,7 +73,7 @@ Configures the title / name shown in the UI, for instance, on Dashboard tabs. It
 
 DOM element, CSS selector, or plugin to mount the URL provider into. This should normally be the Dashboard.
 
-### `serverUrl: null`
+### `companionUrl: null`
 
 URL to an Companion instance.
 

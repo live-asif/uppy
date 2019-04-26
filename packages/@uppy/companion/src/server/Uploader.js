@@ -11,8 +11,18 @@ const logger = require('./logger')
 const validator = require('validator')
 const headerSanitize = require('./header-blacklist')
 
+const PROTOCOLS = Object.freeze({
+  multipart: 'multipart',
+  s3Multipart: 's3-multipart',
+  tus: 'tus'
+})
+
 class Uploader {
   /**
+   * Uploads file to destination based on the supplied protocol (tus, s3-multipart, multipart)
+   * For tus uploads, the deferredLength option is enabled, because file size value can be unreliable
+   * for some providers (Instagram particularly)
+   *
    * @typedef {object} UploaderOptions
    * @property {string} endpoint
    * @property {string=} uploadUrl
@@ -38,11 +48,42 @@ class Uploader {
     this.options = options
     this.token = uuid.v4()
     this.options.path = `${this.options.pathPrefix}/${Uploader.FILE_NAME_PREFIX}-${this.token}`
-    this.writer = fs.createWriteStream(this.options.path, { mode: 0o666 }) // no executable files
+    this.streamsEnded = false
+    this.duplexStream = null
+    // @TODO disabling parallel uploads and downloads for now
+    // if (this.options.protocol === PROTOCOLS.tus) {
+    //   this.duplexStream = new stream.PassThrough()
+    //     .on('error', (err) => logger.error(`${this.shortToken} ${err}`, 'uploader.duplex.error'))
+    // }
+    this.writeStream = fs.createWriteStream(this.options.path, { mode: 0o666 }) // no executable files
       .on('error', (err) => logger.error(`${this.shortToken} ${err}`, 'uploader.write.error'))
     /** @type {number} */
     this.emittedProgress = 0
     this.storage = options.storage
+    this._paused = false
+
+    if (this.options.protocol === PROTOCOLS.tus) {
+      emitter().on(`pause:${this.token}`, () => {
+        this._paused = true
+        if (this.tus) {
+          this.tus.abort()
+        }
+      })
+
+      emitter().on(`resume:${this.token}`, () => {
+        this._paused = false
+        if (this.tus) {
+          this.tus.start()
+        }
+      })
+    }
+  }
+
+  /**
+   * the number of bytes written into the streams
+   */
+  get bytesWritten () {
+    return this.writeStream.bytesWritten
   }
 
   /**
@@ -52,6 +93,13 @@ class Uploader {
    * @returns {boolean}
    */
   validateOptions (options) {
+    // s3 uploads don't require upload destination
+    // validation, because the destination is determined
+    // by the server's s3 config
+    if (options.protocol === PROTOCOLS.s3Multipart) {
+      return true
+    }
+
     if (!options.endpoint && !options.uploadUrl) {
       this._errRespMessage = 'No destination specified'
       return false
@@ -72,6 +120,10 @@ class Uploader {
 
       return true
     })
+  }
+
+  hasError () {
+    return this._errRespMessage != null
   }
 
   /**
@@ -105,55 +157,68 @@ class Uploader {
    * @param {Buffer | Buffer[]} chunk
    */
   handleChunk (chunk) {
-    logger.debug(`${this.shortToken} ${this.writer.bytesWritten} bytes`, 'uploader.download.progress')
-
-    const protocol = this.options.protocol || 'multipart'
+    // @todo a default protocol should not be set. We should ensure that the user specifies her protocol.
+    const protocol = this.options.protocol || PROTOCOLS.multipart
 
     // The download has completed; close the file and start an upload if necessary.
     if (chunk === null) {
-      if (this.options.endpoint && protocol === 'multipart') {
-        this.writer.on('finish', () => {
+      this.writeStream.on('finish', () => {
+        this.streamsEnded = true
+        if (this.options.endpoint && protocol === PROTOCOLS.multipart) {
           this.uploadMultipart()
-        })
-      }
-      return this.writer.end()
+        }
+
+        if (protocol === PROTOCOLS.tus && !this.tus) {
+          return this.uploadTus()
+        }
+      })
+
+      return this.endStreams()
     }
 
-    this.writer.write(chunk, () => {
-      if (protocol === 's3-multipart' && !this.s3Upload) {
-        return this.uploadS3Streaming()
+    this.writeStream.write(chunk, () => {
+      logger.debug(`${this.shortToken} ${this.bytesWritten} bytes`, 'uploader.download.progress')
+      if (protocol === PROTOCOLS.multipart || protocol === PROTOCOLS.tus) {
+        return this.emitIllusiveProgress()
       }
-      if (!this.options.endpoint) return
 
-      if (protocol === 'tus' && !this.tus) {
-        return this.uploadTus()
+      if (protocol === PROTOCOLS.s3Multipart && !this.s3Upload) {
+        return this.uploadS3()
       }
+      // @TODO disabling parallel uploads and downloads for now
+      // if (!this.options.endpoint) return
+
+      // if (protocol === PROTOCOLS.tus && !this.tus) {
+      //   return this.uploadTus()
+      // }
     })
   }
 
   /**
-   *
-   * @param {object} resp
+   * @param {Buffer | Buffer[]} chunk
+   * @param {function} cb
    */
-  handleResponse (resp) {
-    resp.pipe(this.writer)
-
-    const protocol = this.options.protocol || 'multipart'
-
-    this.writer.on('finish', () => {
-      if (protocol === 's3-multipart') {
-        this.uploadS3Full()
+  writeToStreams (chunk, cb) {
+    const done = []
+    const doneLength = this.duplexStream ? 2 : 1
+    const onDone = () => {
+      done.push(true)
+      if (done.length >= doneLength) {
+        cb()
       }
+    }
 
-      if (!this.options.endpoint) return
+    this.writeStream.write(chunk, onDone)
+    if (this.duplexStream) {
+      this.duplexStream.write(chunk, onDone)
+    }
+  }
 
-      if (protocol === 'tus') {
-        this.uploadTus()
-      }
-      if (protocol === 'multipart') {
-        this.uploadMultipart()
-      }
-    })
+  endStreams () {
+    this.writeStream.end()
+    if (this.duplexStream) {
+      this.duplexStream.end()
+    }
   }
 
   getResponse () {
@@ -173,12 +238,43 @@ class Uploader {
   }
 
   /**
+   * This method emits upload progress but also creates an "upload progress" illusion
+   * for the waiting period while only download is happening. Hence, it combines both
+   * download and upload into an upload progress.
+   * @see emitProgress
+   * @param {number=} bytesUploaded the bytes actually Uploaded so far
+   */
+  emitIllusiveProgress (bytesUploaded) {
+    if (this._paused) {
+      return
+    }
+
+    let bytesTotal = this.streamsEnded ? this.bytesWritten : this.options.size
+    if (!this.streamsEnded) {
+      bytesTotal = Math.max(bytesTotal, this.bytesWritten)
+    }
+    bytesUploaded = bytesUploaded || 0
+    // for a 10MB file, 10MB of download will account for 5MB upload progress
+    // and 10MB of actual upload will account for the other 5MB upload progress.
+    const illusiveBytesUploaded = (this.bytesWritten / 2) + (bytesUploaded / 2)
+
+    logger.debug(
+      `${this.shortToken} ${bytesUploaded} ${illusiveBytesUploaded} ${bytesTotal}`,
+      'uploader.illusive.progress'
+    )
+    this.emitProgress(illusiveBytesUploaded, bytesTotal)
+  }
+
+  /**
    *
    * @param {number} bytesUploaded
    * @param {number | null} bytesTotal
    */
   emitProgress (bytesUploaded, bytesTotal) {
     bytesTotal = bytesTotal || this.options.size
+    if (this.tus && this.tus.options.uploadLengthDeferred && this.streamsEnded) {
+      bytesTotal = this.bytesWritten
+    }
     const percentage = (bytesUploaded / bytesTotal * 100)
     const formatPercentage = percentage.toFixed(2)
     logger.debug(
@@ -229,6 +325,9 @@ class Uploader {
     emitter().emit(this.token, dataToEmit)
   }
 
+  /**
+   * start the tus upload
+   */
   uploadTus () {
     const fname = path.basename(this.options.path)
     const ftype = this.options.metadata.type
@@ -240,10 +339,12 @@ class Uploader {
     this.tus = new tus.Upload(file, {
       endpoint: this.options.endpoint,
       uploadUrl: this.options.uploadUrl,
+      // @ts-ignore
+      uploadLengthDeferred: false,
       resume: true,
-      uploadSize: this.options.size || fs.statSync(this.options.path).size,
+      retryDelays: [0, 1000, 3000, 5000],
+      uploadSize: this.bytesWritten,
       metadata,
-      chunkSize: this.writer.bytesWritten,
       /**
        *
        * @param {Error} error
@@ -258,16 +359,7 @@ class Uploader {
        * @param {number} bytesTotal
        */
       onProgress (bytesUploaded, bytesTotal) {
-        uploader.emitProgress(bytesUploaded, bytesTotal)
-      },
-      /**
-       *
-       * @param {number} chunkSize
-       * @param {number} bytesUploaded
-       * @param {number} bytesTotal
-       */
-      onChunkComplete (chunkSize, bytesUploaded, bytesTotal) {
-        uploader.tus.options.chunkSize = uploader.writer.bytesWritten - bytesUploaded
+        uploader.emitIllusiveProgress(bytesUploaded)
       },
       onSuccess () {
         uploader.emitSuccess(uploader.tus.url)
@@ -275,15 +367,9 @@ class Uploader {
       }
     })
 
-    this.tus.start()
-
-    emitter().on(`pause:${this.token}`, () => {
-      this.tus.abort()
-    })
-
-    emitter().on(`resume:${this.token}`, () => {
+    if (!this._paused) {
       this.tus.start()
-    })
+    }
   }
 
   uploadMultipart () {
@@ -293,7 +379,7 @@ class Uploader {
     let bytesUploaded = 0
     file.on('data', (data) => {
       bytesUploaded += data.length
-      this.emitProgress(bytesUploaded, null)
+      this.emitIllusiveProgress(bytesUploaded)
     })
 
     const formData = Object.assign(
@@ -321,8 +407,12 @@ class Uploader {
       }
 
       if (response.statusCode >= 400) {
-        logger.error(`upload failed with status: ${response.statusCode}`, 'upload.multipar.error')
+        logger.error(`upload failed with status: ${response.statusCode}`, 'upload.multipart.error')
         this.emitError(new Error(response.statusMessage), respObj)
+      } else if (bytesUploaded !== this.bytesWritten && bytesUploaded !== this.options.size) {
+        const errMsg = `uploaded only ${bytesUploaded} of ${this.bytesWritten} with status: ${response.statusCode}`
+        logger.error(errMsg, 'upload.multipart.mismatch.error')
+        this.emitError(new Error(errMsg))
       } else {
         this.emitSuccess(null, { response: respObj })
       }
@@ -334,23 +424,15 @@ class Uploader {
   /**
    * Upload the file to S3 while it is still being downloaded.
    */
-  uploadS3Streaming () {
+  uploadS3 () {
     const file = createTailReadStream(this.options.path, {
       tail: true
     })
 
-    this.writer.on('finish', () => {
+    this.writeStream.on('finish', () => {
       file.close()
     })
 
-    return this._uploadS3(file)
-  }
-
-  /**
-   * Upload the file to S3 after it has been fully downloaded.
-   */
-  uploadS3Full () {
-    const file = fs.createReadStream(this.options.path)
     return this._uploadS3(file)
   }
 

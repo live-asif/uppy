@@ -23,19 +23,22 @@ class Uppy {
   * @param {object} opts — Uppy options
   */
   constructor (opts) {
-    const defaultLocale = {
+    this.defaultLocale = {
       strings: {
         youCanOnlyUploadX: {
           0: 'You can only upload %{smart_count} file',
-          1: 'You can only upload %{smart_count} files'
+          1: 'You can only upload %{smart_count} files',
+          2: 'You can only upload %{smart_count} files'
         },
         youHaveToAtLeastSelectX: {
           0: 'You have to select at least %{smart_count} file',
-          1: 'You have to select at least %{smart_count} files'
+          1: 'You have to select at least %{smart_count} files',
+          2: 'You have to select at least %{smart_count} files'
         },
         exceedsSize: 'This file exceeds maximum allowed size of',
-        youCanOnlyUploadFileTypes: 'You can only upload:',
+        youCanOnlyUploadFileTypes: 'You can only upload: %{types}',
         companionError: 'Connection with Companion failed',
+        companionAuthError: 'Authorization required',
         failedToUpload: 'Failed to upload %{file}',
         noInternetConnection: 'No Internet connection',
         connectedToInternet: 'Connected to the Internet',
@@ -43,10 +46,16 @@ class Uppy {
         noFilesFound: 'You have no files or folders here',
         selectXFiles: {
           0: 'Select %{smart_count} file',
-          1: 'Select %{smart_count} files'
+          1: 'Select %{smart_count} files',
+          2: 'Select %{smart_count} files'
         },
         cancel: 'Cancel',
-        logOut: 'Log out'
+        logOut: 'Log out',
+        filter: 'Filter',
+        resetFilter: 'Reset filter',
+        loading: 'Loading...',
+        authenticateWithTitle: 'Please authenticate with %{pluginName} to select files',
+        authenticateWith: 'Connect to %{pluginName}'
       }
     }
 
@@ -65,7 +74,6 @@ class Uppy {
       meta: {},
       onBeforeFileAdded: (currentFile, files) => currentFile,
       onBeforeUpload: (files) => files,
-      locale: defaultLocale,
       store: DefaultStore()
     }
 
@@ -74,9 +82,10 @@ class Uppy {
     this.opts.restrictions = Object.assign({}, defaultOptions.restrictions, this.opts.restrictions)
 
     // i18n
-    this.translator = new Translator([ defaultLocale, this.opts.locale ])
+    this.translator = new Translator([ this.defaultLocale, this.opts.locale ])
     this.locale = this.translator.locale
     this.i18n = this.translator.translate.bind(this.translator)
+    this.i18nArray = this.translator.translateArray.bind(this.translator)
 
     // Container for different types of plugins
     this.plugins = {}
@@ -120,6 +129,7 @@ class Uppy {
       allowNewUpload: true,
       capabilities: {
         uploadProgress: supportsUploadProgress(),
+        individualCancellation: true,
         resumableUploads: false
       },
       totalProgress: 0,
@@ -341,7 +351,7 @@ class Uppy {
     }
 
     if (allowedFileTypes) {
-      const isCorrectFileType = allowedFileTypes.filter((type) => {
+      const isCorrectFileType = allowedFileTypes.some((type) => {
         // if (!file.type) return false
 
         // is this is a mime-type
@@ -352,19 +362,19 @@ class Uppy {
 
         // otherwise this is likely an extension
         if (type[0] === '.') {
-          if (file.extension === type.substr(1)) {
-            return file.extension
-          }
+          return file.extension.toLowerCase() === type.substr(1).toLowerCase()
         }
-      }).length > 0
+        return false
+      })
 
       if (!isCorrectFileType) {
         const allowedFileTypesString = allowedFileTypes.join(', ')
-        throw new Error(`${this.i18n('youCanOnlyUploadFileTypes')} ${allowedFileTypesString}`)
+        throw new Error(this.i18n('youCanOnlyUploadFileTypes', { types: allowedFileTypesString }))
       }
     }
 
-    if (maxFileSize) {
+    // We can't check maxFileSize if the size is unknown.
+    if (maxFileSize && file.data.size != null) {
       if (file.data.size > maxFileSize) {
         throw new Error(`${this.i18n('exceedsSize')} ${prettyBytes(maxFileSize)}`)
       }
@@ -425,6 +435,8 @@ class Uppy {
     meta.name = fileName
     meta.type = fileType
 
+    // `null` means the size is unknown.
+    const size = isFinite(file.data.size) ? file.data.size : null
     const newFile = {
       source: file.source || '',
       id: fileID,
@@ -436,11 +448,11 @@ class Uppy {
       progress: {
         percentage: 0,
         bytesUploaded: 0,
-        bytesTotal: file.data.size || 0,
+        bytesTotal: size,
         uploadComplete: false,
         uploadStarted: false
       },
-      size: file.data.size || 0,
+      size: size,
       isRemote: isRemote,
       remote: file.remote || '',
       preview: file.preview
@@ -449,6 +461,7 @@ class Uppy {
     try {
       this._checkRestrictions(newFile)
     } catch (err) {
+      this.emit('restriction-failed', newFile, err)
       onError(err)
     }
 
@@ -627,11 +640,17 @@ class Uppy {
       return
     }
 
+    // bytesTotal may be null or zero; in that case we can't divide by it
+    const canHavePercentage = isFinite(data.bytesTotal) && data.bytesTotal > 0
     this.setFileState(file.id, {
       progress: Object.assign({}, this.getFile(file.id).progress, {
         bytesUploaded: data.bytesUploaded,
         bytesTotal: data.bytesTotal,
-        percentage: Math.floor((data.bytesUploaded / data.bytesTotal * 100).toFixed(2))
+        percentage: canHavePercentage
+          // TODO(goto-bus-stop) flooring this should probably be the choice of the UI?
+          // we get more accurate calculations if we don't round this at all.
+          ? Math.floor(data.bytesUploaded / data.bytesTotal * 100)
+          : 0
       })
     })
 
@@ -680,9 +699,15 @@ class Uppy {
       uploadedSize += averageSize * (file.progress.percentage || 0)
     })
 
-    const totalProgress = totalSize === 0
+    let totalProgress = totalSize === 0
       ? 0
       : Math.round(uploadedSize / totalSize * 100)
+
+    // hot fix, because:
+    // uploadedSize ended up larger than totalSize, resulting in 1325% total
+    if (totalProgress > 100) {
+      totalProgress = 100
+    }
 
     this.setState({ totalProgress })
     this.emit('progress', totalProgress)
@@ -1002,35 +1027,27 @@ class Uppy {
   /**
    * Logs stuff to console, only if `debug` is set to true. Silent in production.
    *
-   * @param {String|Object} msg to log
+   * @param {String|Object} message to log
    * @param {String} [type] optional `error` or `warning`
    */
-  log (msg, type) {
+  log (message, type) {
     if (!this.opts.debug) {
       return
     }
 
-    let message = `[Uppy] [${getTimeStamp()}] ${msg}`
-
-    window['uppyLog'] = window['uppyLog'] + '\n' + 'DEBUG LOG: ' + msg
+    const prefix = `[Uppy] [${getTimeStamp()}]`
 
     if (type === 'error') {
-      console.error(message)
+      console.error(prefix, message)
       return
     }
 
     if (type === 'warning') {
-      console.warn(message)
+      console.warn(prefix, message)
       return
     }
 
-    if (msg === `${msg}`) {
-      console.log(message)
-    } else {
-      message = `[Uppy] [${getTimeStamp()}]`
-      console.log(message)
-      console.dir(msg)
-    }
+    console.log(prefix, message)
   }
 
   /**
@@ -1184,7 +1201,6 @@ class Uppy {
       const { currentUploads } = this.getState()
       const currentUpload = currentUploads[uploadID]
       if (!currentUpload) {
-        this.log(`Not setting result for an upload that has been removed: ${uploadID}`)
         return
       }
 
@@ -1199,12 +1215,20 @@ class Uppy {
       // always refers to the latest state. In the handler right above it refers
       // to an outdated object without the `.result` property.
       const { currentUploads } = this.getState()
+      if (!currentUploads[uploadID]) {
+        return
+      }
       const currentUpload = currentUploads[uploadID]
       const result = currentUpload.result
       this.emit('complete', result)
 
       this._removeUpload(uploadID)
 
+      return result
+    }).then((result) => {
+      if (result == null) {
+        this.log(`Not setting result for an upload that has been removed: ${uploadID}`)
+      }
       return result
     })
   }

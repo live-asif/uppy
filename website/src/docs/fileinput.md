@@ -1,11 +1,11 @@
 ---
 type: docs
-order: 32
+order: 2
 title: "File Input"
 module: "@uppy/file-input"
 permalink: docs/file-input/
 alias: docs/fileinput/
-
+category: 'Sources'
 ---
 
 `@uppy/file-input` is the most barebones UI for selecting files — it shows a single button that, when clicked, opens up the browser's file selector.
@@ -47,7 +47,7 @@ import '@uppy/core/dist/style.css'
 import '@uppy/file-input/dist/style.css'
 ```
 
-Import general Core styles from `@uppy/core/dist/style.css` first, then add the Drag & Drop styles from `@uppy/file-input/dist/style.css`. A minified version is also available as `style.min.css` at the same path. The way to do import depends on your build system.
+Import general Core styles from `@uppy/core/dist/style.css` first, then add the File Input styles from `@uppy/file-input/dist/style.css`. A minified version is also available as `style.min.css` at the same path. The way to do import depends on your build system.
 
 ## Options
 

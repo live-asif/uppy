@@ -1,16 +1,15 @@
 const { Plugin } = require('@uppy/core')
 const Translator = require('@uppy/utils/lib/Translator')
-const dragDrop = require('drag-drop')
 const DashboardUI = require('./components/Dashboard')
 const StatusBar = require('@uppy/status-bar')
 const Informer = require('@uppy/informer')
 const ThumbnailGenerator = require('@uppy/thumbnail-generator')
 const findAllDOMElements = require('@uppy/utils/lib/findAllDOMElements')
 const toArray = require('@uppy/utils/lib/toArray')
+const getDroppedFiles = require('@uppy/utils/lib/getDroppedFiles')
 const cuid = require('cuid')
-// const prettyBytes = require('prettier-bytes')
 const ResizeObserver = require('resize-observer-polyfill').default || require('resize-observer-polyfill')
-const { defaultTabIcon } = require('./components/icons')
+const { defaultPickerIcon } = require('./components/icons')
 
 // Some code for managing focus was adopted from https://github.com/ghosh/micromodal
 // MIT licence, https://github.com/ghosh/micromodal/blob/master/LICENSE.md
@@ -52,23 +51,21 @@ module.exports = class Dashboard extends Plugin {
     this.type = 'orchestrator'
     this.modalName = `uppy-Dashboard-${cuid()}`
 
-    const defaultLocale = {
+    this.defaultLocale = {
       strings: {
-        selectToUpload: 'Select files to upload',
         closeModal: 'Close Modal',
-        upload: 'Upload',
         importFrom: 'Import from %{name}',
         addingMoreFiles: 'Adding more files',
         addMoreFiles: 'Add more files',
-        dashboardWindowTitle: 'Uppy Dashboard Window (Press escape to close)',
-        dashboardTitle: 'Uppy Dashboard',
+        dashboardWindowTitle: 'File Uploader Window (Press escape to close)',
+        dashboardTitle: 'File Uploader',
         copyLinkToClipboardSuccess: 'Link copied to clipboard',
         copyLinkToClipboardFallback: 'Copy the URL below',
         copyLink: 'Copy link',
+        link: 'Link',
         fileSource: 'File source: %{name}',
         done: 'Done',
         back: 'Back',
-        name: 'Name',
         removeFile: 'Remove file',
         editFile: 'Edit file',
         editing: 'Editing %{file}',
@@ -76,14 +73,11 @@ module.exports = class Dashboard extends Plugin {
         finishEditingFile: 'Finish editing file',
         saveChanges: 'Save changes',
         cancel: 'Cancel',
-        localDisk: 'Local Disk',
         myDevice: 'My Device',
         dropPasteImport: 'Drop files here, paste, %{browse} or import from',
         dropPaste: 'Drop files here, paste or %{browse}',
+        dropHint: 'Drop your files here',
         browse: 'browse',
-        fileProgress: 'File progress: upload speed and ETA',
-        numberOfSelectedFiles: 'Number of selected files',
-        uploadAllNewFiles: 'Upload all new files',
         emptyFolderAdded: 'No files were added from empty folder',
         uploadComplete: 'Upload complete',
         uploadPaused: 'Upload paused',
@@ -93,28 +87,25 @@ module.exports = class Dashboard extends Plugin {
         cancelUpload: 'Cancel upload',
         xFilesSelected: {
           0: '%{smart_count} file selected',
-          1: '%{smart_count} files selected'
-        },
-        uploadXFiles: {
-          0: 'Upload %{smart_count} file',
-          1: 'Upload %{smart_count} files'
+          1: '%{smart_count} files selected',
+          2: '%{smart_count} files selected'
         },
         uploadingXFiles: {
           0: 'Uploading %{smart_count} file',
-          1: 'Uploading %{smart_count} files'
+          1: 'Uploading %{smart_count} files',
+          2: 'Uploading %{smart_count} files'
         },
         processingXFiles: {
           0: 'Processing %{smart_count} file',
-          1: 'Processing %{smart_count} files'
-        },
-        uploadXNewFiles: {
-          0: 'Upload +%{smart_count} file',
-          1: 'Upload +%{smart_count} files'
+          1: 'Processing %{smart_count} files',
+          2: 'Processing %{smart_count} files'
         },
         folderAdded: {
           0: 'Added %{smart_count} file from %{folder}',
-          1: 'Added %{smart_count} files from %{folder}'
-        }
+          1: 'Added %{smart_count} files from %{folder}',
+          2: 'Added %{smart_count} files from %{folder}'
+        },
+        poweredBy: 'Powered by'
       }
     }
 
@@ -127,7 +118,7 @@ module.exports = class Dashboard extends Plugin {
       width: 750,
       height: 550,
       thumbnailWidth: 280,
-      defaultTabIcon: defaultTabIcon,
+      defaultPickerIcon,
       showLinkToFileUploadResult: true,
       showProgressDetails: false,
       hideUploadButton: false,
@@ -145,7 +136,6 @@ module.exports = class Dashboard extends Plugin {
       proudlyDisplayPoweredByUppy: true,
       onRequestCloseModal: () => this.closeModal(),
       showSelectedFiles: true,
-      // locale: defaultLocale,
       browserBackButtonClose: false
     }
 
@@ -153,7 +143,7 @@ module.exports = class Dashboard extends Plugin {
     this.opts = { ...defaultOptions, ...opts }
 
     // i18n
-    this.translator = new Translator([ defaultLocale, this.uppy.locale, this.opts.locale ])
+    this.translator = new Translator([ this.defaultLocale, this.uppy.locale, this.opts.locale ])
     this.i18n = this.translator.translate.bind(this.translator)
     this.i18nArray = this.translator.translateArray.bind(this.translator)
 
@@ -178,11 +168,18 @@ module.exports = class Dashboard extends Plugin {
     this.handleClickOutside = this.handleClickOutside.bind(this)
     this.toggleFileCard = this.toggleFileCard.bind(this)
     this.toggleAddFilesPanel = this.toggleAddFilesPanel.bind(this)
-    this.handleDrop = this.handleDrop.bind(this)
     this.handlePaste = this.handlePaste.bind(this)
     this.handleInputChange = this.handleInputChange.bind(this)
     this.render = this.render.bind(this)
     this.install = this.install.bind(this)
+
+    this.handleDragOver = this.handleDragOver.bind(this)
+    this.handleDragLeave = this.handleDragLeave.bind(this)
+    this.handleDrop = this.handleDrop.bind(this)
+
+    // Timeouts
+    this.makeDashboardInsidesVisibleAnywayTimeout = null
+    this.removeDragOverClassTimeout = null
   }
 
   removeTarget (plugin) {
@@ -227,32 +224,41 @@ module.exports = class Dashboard extends Plugin {
 
   hideAllPanels () {
     this.setPluginState({
-      activePanel: false,
-      showAddFilesPanel: false
+      activePickerPanel: false,
+      showAddFilesPanel: false,
+      activeOverlayType: null
     })
   }
 
   showPanel (id) {
     const { targets } = this.getPluginState()
 
-    const activePanel = targets.filter((target) => {
+    const activePickerPanel = targets.filter((target) => {
       return target.type === 'acquirer' && target.id === id
     })[0]
 
     this.setPluginState({
-      activePanel: activePanel
+      activePickerPanel: activePickerPanel,
+      activeOverlayType: 'PickerPanel'
     })
   }
 
   requestCloseModal () {
     if (this.opts.onRequestCloseModal) {
       return this.opts.onRequestCloseModal()
-    } else {
-      this.closeModal()
     }
+    return this.closeModal()
   }
 
   getFocusableNodes () {
+    // if an overlay is open, we should trap focus inside the overlay
+    const activeOverlayType = this.getPluginState().activeOverlayType
+    if (activeOverlayType) {
+      const activeOverlay = this.el.querySelector(`[data-uppy-panelType="${activeOverlayType}"]`)
+      const nodes = activeOverlay.querySelectorAll(FOCUSABLE_ELEMENTS)
+      return Object.keys(nodes).map((key) => nodes[key])
+    }
+
     const nodes = this.el.querySelectorAll(FOCUSABLE_ELEMENTS)
     return Object.keys(nodes).map((key) => nodes[key])
   }
@@ -420,47 +426,138 @@ module.exports = class Dashboard extends Plugin {
     if (this.opts.closeModalOnClickOutside) this.requestCloseModal()
   }
 
-  handlePaste (ev) {
-    const files = toArray(ev.clipboardData.items)
-    files.forEach((file) => {
-      if (file.kind !== 'file') return
+  handlePaste (event) {
+    // 1. Let any acquirer plugin (Url/Webcam/etc.) handle pastes to the root
+    this.uppy.iteratePlugins((plugin) => {
+      if (plugin.type === 'acquirer') {
+        // Every Plugin with .type acquirer can define handleRootPaste(event)
+        plugin.handleRootPaste && plugin.handleRootPaste(event)
+      }
+    })
 
-      const blob = file.getAsFile()
-      if (!blob) {
-        this.uppy.log('[Dashboard] File pasted, but the file blob is empty')
-        this.uppy.info('Error pasting file', 'error')
-        return
-      }
+    // 2. Add all dropped files
+    const files = toArray(event.clipboardData.files)
+    files.forEach((file) => {
       this.uppy.log('[Dashboard] File pasted')
-      try {
-        this.uppy.addFile({
-          source: this.id,
-          name: file.name,
-          type: file.type,
-          data: blob
-        })
-      } catch (err) {
-        // Nothing, restriction errors handled in Core
-      }
+      this.addFile(file)
     })
   }
 
-  handleInputChange (ev) {
-    ev.preventDefault()
-    const files = toArray(ev.target.files)
+  handleInputChange (event) {
+    event.preventDefault()
+    const files = toArray(event.target.files)
+    files.forEach((file) =>
+      this.addFile(file)
+    )
+  }
 
-    files.forEach((file) => {
-      try {
-        this.uppy.addFile({
-          source: this.id,
-          name: file.name,
-          type: file.type,
-          data: file
+  addFile (file) {
+    try {
+      this.uppy.addFile({
+        source: this.id,
+        name: file.name,
+        type: file.type,
+        data: file,
+        meta: {
+          // path of the file relative to the ancestor directory the user selected.
+          // e.g. 'docs/Old Prague/airbnb.pdf'
+          relativePath: file.relativePath || null
+        }
+      })
+    } catch (err) {
+      // Nothing, restriction errors handled in Core
+    }
+  }
+
+  // _Why make insides of Dashboard invisible until first ResizeObserver event is emitted?
+  //  ResizeOberserver doesn't emit the first resize event fast enough, users can see the jump from one .uppy-size-- to another (e.g. in Safari)
+  // _Why not apply visibility property to .uppy-Dashboard-inner?
+  //  Because ideally, acc to specs, ResizeObserver should see invisible elements as of width 0. So even though applying invisibility to .uppy-Dashboard-inner works now, it may not work in the future.
+  startListeningToResize () {
+    // Watch for Dashboard container (`.uppy-Dashboard-inner`) resize
+    // and update containerWidth/containerHeight in plugin state accordingly.
+    // Emits first event on initialization.
+    this.resizeObserver = new ResizeObserver((entries, observer) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect
+
+        this.uppy.log(`[Dashboard] resized: ${width} / ${height}`)
+
+        this.setPluginState({
+          containerWidth: width,
+          containerHeight: height,
+          areInsidesReadyToBeVisible: true
         })
-      } catch (err) {
-        // Nothing, restriction errors handled in Core
       }
     })
+    this.resizeObserver.observe(this.el.querySelector('.uppy-Dashboard-inner'))
+
+    // If ResizeObserver fails to emit an event telling us what size to use - default to the mobile view
+    this.makeDashboardInsidesVisibleAnywayTimeout = setTimeout(() => {
+      const pluginState = this.getPluginState()
+      if (!pluginState.areInsidesReadyToBeVisible) {
+        this.uppy.log("[Dashboard] resize event didn't fire on time: defaulted to mobile layout")
+
+        this.setPluginState({
+          areInsidesReadyToBeVisible: true
+        })
+      }
+    }, 1000)
+  }
+
+  stopListeningToResize () {
+    this.resizeObserver.disconnect()
+
+    clearTimeout(this.makeDashboardInsidesVisibleAnywayTimeout)
+  }
+
+  handleDragOver (event) {
+    event.preventDefault()
+    event.stopPropagation()
+
+    clearTimeout(this.removeDragOverClassTimeout)
+    this.setPluginState({ isDraggingOver: true })
+  }
+
+  handleDragLeave (event) {
+    event.preventDefault()
+    event.stopPropagation()
+
+    clearTimeout(this.removeDragOverClassTimeout)
+    // Timeout against flickering, this solution is taken from drag-drop library. Solution with 'pointer-events: none' didn't work across browsers.
+    this.removeDragOverClassTimeout = setTimeout(() => {
+      this.setPluginState({ isDraggingOver: false })
+    }, 50)
+  }
+
+  handleDrop (event, dropCategory) {
+    event.preventDefault()
+    event.stopPropagation()
+    clearTimeout(this.removeDragOverClassTimeout)
+    // 1. Add a small (+) icon on drop
+    event.dataTransfer.dropEffect = 'copy'
+
+    // 2. Remove dragover class
+    this.setPluginState({ isDraggingOver: false })
+
+    // 3. Let any acquirer plugin (Url/Webcam/etc.) handle drops to the root
+    this.uppy.iteratePlugins((plugin) => {
+      if (plugin.type === 'acquirer') {
+        // Every Plugin with .type acquirer can define handleRootDrop(event)
+        plugin.handleRootDrop && plugin.handleRootDrop(event)
+      }
+    })
+
+    // 4. Add all dropped files
+    getDroppedFiles(event.dataTransfer)
+      .then((files) => {
+        if (files.length > 0) {
+          this.uppy.log('[Dashboard] Files were dropped')
+          files.forEach((file) =>
+            this.addFile(file)
+          )
+        }
+      })
   }
 
   initEvents () {
@@ -474,26 +571,7 @@ module.exports = class Dashboard extends Plugin {
       this.uppy.log('Dashboard modal trigger not found. Make sure `trigger` is set in Dashboard options unless you are planning to call openModal() method yourself', 'error')
     }
 
-    // Drag Drop
-    this.removeDragDropListener = dragDrop(this.el, (files) => {
-      this.handleDrop(files)
-    })
-
-    // Watch for Dashboard container (`.uppy-Dashboard-inner`) resize
-    // and update containerWidth/containerHeight in plugin state accordingly
-    this.ro = new ResizeObserver((entries, observer) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect
-
-        this.uppy.log(`[Dashboard] resized: ${width} / ${height}`)
-
-        this.setPluginState({
-          containerWidth: width,
-          containerHeight: height
-        })
-      }
-    })
-    this.ro.observe(this.el.querySelector('.uppy-Dashboard-inner'))
+    this.startListeningToResize()
 
     this.uppy.on('plugin-remove', this.removeTarget)
     this.uppy.on('file-added', this.handleFileAdded)
@@ -517,10 +595,8 @@ module.exports = class Dashboard extends Plugin {
       showModalTrigger.forEach(trigger => trigger.removeEventListener('click', this.openModal))
     }
 
-    this.ro.unobserve(this.el.querySelector('.uppy-Dashboard-inner'))
+    this.stopListeningToResize()
 
-    this.removeDragDropListener()
-    // window.removeEventListener('resize', this.throttledUpdateDashboardElWidth)
     window.removeEventListener('popstate', this.handlePopState, false)
     this.uppy.off('plugin-remove', this.removeTarget)
     this.uppy.off('file-added', this.handleFileAdded)
@@ -529,30 +605,15 @@ module.exports = class Dashboard extends Plugin {
 
   toggleFileCard (fileId) {
     this.setPluginState({
-      fileCardFor: fileId || false
+      fileCardFor: fileId || null,
+      activeOverlayType: fileId ? 'FileCard' : null
     })
   }
 
   toggleAddFilesPanel (show) {
     this.setPluginState({
-      showAddFilesPanel: show
-    })
-  }
-
-  handleDrop (files) {
-    this.uppy.log('[Dashboard] Files were dropped')
-
-    files.forEach((file) => {
-      try {
-        this.uppy.addFile({
-          source: this.id,
-          name: file.name,
-          type: file.type,
-          data: file
-        })
-      } catch (err) {
-        // Nothing, restriction errors handled in Core
-      }
+      showAddFilesPanel: show,
+      activeOverlayType: show ? 'AddFiles' : null
     })
   }
 
@@ -606,29 +667,11 @@ module.exports = class Dashboard extends Plugin {
 
     const isAllPaused = inProgressFiles.length !== 0 &&
       pausedFiles.length === inProgressFiles.length
-    // const isAllPaused = inProgressNotPausedFiles.length === 0 &&
-    //   !isAllComplete &&
-    //   !isAllErrored &&
-    //   uploadStartedFiles.length > 0
-
-    // let inProgressNotPausedFilesArray = []
-    // inProgressNotPausedFiles.forEach((file) => {
-    //   inProgressNotPausedFilesArray.push(files[file])
-    // })
-
-    // let totalSize = 0
-    // let totalUploadedSize = 0
-    // inProgressNotPausedFilesArray.forEach((file) => {
-    //   totalSize = totalSize + (file.progress.bytesTotal || 0)
-    //   totalUploadedSize = totalUploadedSize + (file.progress.bytesUploaded || 0)
-    // })
-    // totalSize = prettyBytes(totalSize)
-    // totalUploadedSize = prettyBytes(totalUploadedSize)
 
     const attachRenderFunctionToTarget = (target) => {
       const plugin = this.uppy.getPlugin(target.id)
       return Object.assign({}, target, {
-        icon: plugin.icon || this.opts.defaultTabIcon,
+        icon: plugin.icon || this.opts.defaultPickerIcon,
         render: plugin.render
       })
     }
@@ -668,7 +711,7 @@ module.exports = class Dashboard extends Plugin {
 
     return DashboardUI({
       state,
-      modal: pluginState,
+      isHidden: pluginState.isHidden,
       files,
       newFiles,
       uploadStartedFiles,
@@ -685,7 +728,7 @@ module.exports = class Dashboard extends Plugin {
       totalProgress: state.totalProgress,
       allowNewUpload,
       acquirers,
-      activePanel: pluginState.activePanel,
+      activePickerPanel: pluginState.activePickerPanel,
       animateOpenClose: this.opts.animateOpenClose,
       isClosing: pluginState.isClosing,
       getPlugin: this.uppy.getPlugin,
@@ -708,7 +751,7 @@ module.exports = class Dashboard extends Plugin {
       note: this.opts.note,
       metaFields: pluginState.metaFields,
       resumableUploads: capabilities.resumableUploads || false,
-      bundled: capabilities.bundled || false,
+      individualCancellation: capabilities.individualCancellation,
       startUpload,
       pauseUpload: this.uppy.pauseResume,
       retryUpload: this.uppy.retryUpload,
@@ -726,10 +769,17 @@ module.exports = class Dashboard extends Plugin {
       currentWidth: pluginState.containerWidth,
       isWide: pluginState.containerWidth > 400,
       containerWidth: pluginState.containerWidth,
+      areInsidesReadyToBeVisible: pluginState.areInsidesReadyToBeVisible,
       isTargetDOMEl: this.isTargetDOMEl,
+      parentElement: this.el,
       allowedFileTypes: this.uppy.opts.restrictions.allowedFileTypes,
       maxNumberOfFiles: this.uppy.opts.restrictions.maxNumberOfFiles,
-      showSelectedFiles: this.opts.showSelectedFiles
+      showSelectedFiles: this.opts.showSelectedFiles,
+      // drag props
+      isDraggingOver: pluginState.isDraggingOver,
+      handleDragOver: this.handleDragOver,
+      handleDragLeave: this.handleDragLeave,
+      handleDrop: this.handleDrop
     })
   }
 
@@ -745,11 +795,14 @@ module.exports = class Dashboard extends Plugin {
     // Set default state for Dashboard
     this.setPluginState({
       isHidden: true,
-      showFileCard: false,
+      fileCardFor: null,
+      activeOverlayType: null,
       showAddFilesPanel: false,
-      activePanel: false,
+      activePickerPanel: false,
       metaFields: this.opts.metaFields,
-      targets: []
+      targets: [],
+      // We'll make them visible once .containerWidth is determined
+      areInsidesReadyToBeVisible: false
     })
 
     const { inline, closeAfterFinish } = this.opts

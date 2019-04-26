@@ -18,13 +18,15 @@ module.exports = class Instagram extends Plugin {
     )
 
     this.provider = new Provider(uppy, {
-      serverUrl: this.opts.serverUrl,
+      companionUrl: this.opts.companionUrl,
       serverHeaders: this.opts.serverHeaders,
+      storage: this.opts.storage,
       provider: 'instagram',
-      authProvider: 'instagram'
+      authProvider: 'instagram',
+      pluginId: this.id
     })
 
-    this.onAuth = this.onAuth.bind(this)
+    this.onFirstRender = this.onFirstRender.bind(this)
     this.render = this.render.bind(this)
   }
 
@@ -58,11 +60,8 @@ module.exports = class Instagram extends Plugin {
     this.unmount()
   }
 
-  onAuth (authenticated) {
-    this.setPluginState({ authenticated })
-    if (authenticated) {
-      this.view.getFolder('recent')
-    }
+  onFirstRender () {
+    this.view.getFolder('recent')
   }
 
   render (state) {
